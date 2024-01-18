@@ -256,22 +256,6 @@ impl DigitalOutputDevice {
     }
 }
 
-pub struct RGBLED {
-    pub red: LED,
-    pub green: LED,
-    pub blue: LED,
-}
-
-impl RGBLED {
-    pub fn new(pin_red: u8, pin_green: u8, pin_blue: u8) -> RGBLED {
-        RGBLED {
-            red: LED::new(pin_red),
-            green: LED::new(pin_green),
-            blue: LED::new(pin_blue),
-        }
-    }
-}
-
 ///  Represents a light emitting diode (LED)
 ///
 /// # Example
@@ -399,35 +383,48 @@ macro_rules! impl_pwm_device {
             off_time: f32,
             fade_in_time: f32,
             fade_out_time: f32,
+            on_value: f32,
+            off_value: f32,
             n: Option<i32>,
         ) {
             let mut sequence: Vec<(f32, f32)> = Vec::new();
             let fps = 25.0;
             // create sequence for fading in
             if fade_in_time > 0.0 {
-                for i in 0..fps as i32 * fade_in_time as i32 {
-                    sequence.push((i as f32 * (1.0 / fps) / fade_in_time, 1.0 / fps))
+                let frames = fps as i32 * fade_in_time as i32;
+                for i in 0..frames {
+                    let proportion = (i as f32 * (1.0 / fps) / fade_in_time);
+                    sequence.push((
+                        off_value * (1. - proportion) + on_value * proportion,
+                        1.0 / fps,
+                    ))
                 }
             }
 
             // allow to stay on for on_time
-            sequence.push((1.0, on_time));
+            sequence.push((on_value, on_time));
 
             // create sequence for fading out
             if fade_out_time > 0.0 {
-                for i in 0..fps as i32 * fade_out_time as i32 {
-                    sequence.push((1.0 - (i as f32 * (1.0 / fps) / fade_out_time), 1.0 / fps))
+                let frames = fps as i32 * fade_out_time as i32;
+                for i in 0..frames {
+                    let proportion = (i as f32 * (1.0 / fps) / fade_out_time);
+                    sequence.push((
+                        on_value * (1. - proportion) + off_value * proportion,
+                        1.0 / fps,
+                    ))
                 }
             }
 
             // allow to stay off for off_time
-            sequence.push((0.0, off_time));
+            sequence.push((off_value, off_time));
 
             let device = Arc::clone(&self.device);
             let blinking = Arc::clone(&self.blinking);
-
+            let active_high = self.active_high();
             self.handle = Some(thread::spawn(move || {
                 blinking.store(true, Ordering::SeqCst);
+
                 match n {
                     Some(end) => {
                         for _ in 0..end {
@@ -436,11 +433,13 @@ macro_rules! impl_pwm_device {
                                     // device.lock().unwrap().off();
                                     break;
                                 }
+                                let value_given_active_high =
+                                    if active_high { *value } else { 1. - *value };
                                 device
                                     .lock()
                                     .unwrap()
                                     .pin
-                                    .set_pwm_frequency(100.0, f64::from(*value))
+                                    .set_pwm_frequency(100.0, f64::from(value_given_active_high))
                                     .unwrap();
                                 thread::sleep(Duration::from_millis((delay * 1000 as f32) as u64));
                             }
@@ -452,11 +451,13 @@ macro_rules! impl_pwm_device {
                                 // device.lock().unwrap().off();
                                 break;
                             }
+                            let value_given_active_high =
+                                if active_high { *value } else { 1. - *value };
                             device
                                 .lock()
                                 .unwrap()
                                 .pin
-                                .set_pwm_frequency(100.0, f64::from(*value))
+                                .set_pwm_frequency(100.0, f64::from(value_given_active_high))
                                 .unwrap();
                             thread::sleep(Duration::from_millis((delay * 1000 as f32) as u64));
                         }
@@ -550,10 +551,34 @@ impl PWMOutputDevice {
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
     ///
-    pub fn blink(&mut self, on_time: f32, off_time: f32, fade_in_time: f32, fade_out_time: f32) {
+    pub fn blink(
+        &mut self,
+        on_time: f32,
+        off_time: f32,
+        fade_in_time: f32,
+        fade_out_time: f32,
+        on_value: f32,
+        off_value: f32,
+    ) {
         match self.blink_count {
-            None => self.blinker(on_time, off_time, fade_in_time, fade_out_time, None),
-            Some(n) => self.blinker(on_time, off_time, fade_in_time, fade_out_time, Some(n)),
+            None => self.blinker(
+                on_time,
+                off_time,
+                fade_in_time,
+                fade_out_time,
+                on_value,
+                off_value,
+                None,
+            ),
+            Some(n) => self.blinker(
+                on_time,
+                off_time,
+                fade_in_time,
+                fade_out_time,
+                on_value,
+                off_value,
+                Some(n),
+            ),
         }
     }
 
@@ -561,8 +586,8 @@ impl PWMOutputDevice {
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
     ///
-    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32) {
-        self.blink(0.0, 0.0, fade_in_time, fade_out_time)
+    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_value: f32, off_value: f32) {
+        self.blink(0.0, 0.0, fade_in_time, fade_out_time, on_value, off_value)
     }
 }
 
@@ -587,8 +612,23 @@ impl PWMLED {
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
     ///
-    pub fn blink(&mut self, on_time: f32, off_time: f32, fade_in_time: f32, fade_out_time: f32) {
-        self.0.blink(on_time, off_time, fade_in_time, fade_out_time)
+    pub fn blink(
+        &mut self,
+        on_time: f32,
+        off_time: f32,
+        fade_in_time: f32,
+        fade_out_time: f32,
+        on_value: f32,
+        off_value: f32,
+    ) {
+        self.0.blink(
+            on_time,
+            off_time,
+            fade_in_time,
+            fade_out_time,
+            on_value,
+            off_value,
+        )
     }
 
     /// Turns the device on.
@@ -605,8 +645,9 @@ impl PWMLED {
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
     ///
-    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32) {
-        self.0.pulse(fade_in_time, fade_out_time);
+    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_value: f32, off_value: f32) {
+        self.0
+            .pulse(fade_in_time, fade_out_time, on_value, off_value);
     }
 
     /// Set the duty cycle of the PWM device. 0.0 is off, 1.0 is fully on.
@@ -619,6 +660,127 @@ impl PWMLED {
     /// * `n` - Number of times to blink
     pub fn set_blink_count(&mut self, n: i32) {
         self.0.blink_count = Some(n)
+    }
+}
+
+pub struct RGBLED {
+    red: PWMLED,
+    green: PWMLED,
+    blue: PWMLED,
+}
+
+impl RGBLED {
+    pub fn new(red: u8, green: u8, blue: u8, active_high: bool) -> RGBLED {
+        let mut red = PWMLED::new(red);
+        let mut green = PWMLED::new(green);
+        let mut blue = PWMLED::new(blue);
+        red.0.set_active_high(active_high);
+        green.0.set_active_high(active_high);
+        blue.0.set_active_high(active_high);
+        Self { red, green, blue }
+    }
+
+    /// Make the device turn on and off repeatedly
+    /// * `on_time` - Number of seconds on
+    /// * `off_time` - Number of seconds off
+    /// * `fade_in_time` - Number of seconds to spend fading in
+    /// * `fade_out_time` - Number of seconds to spend fading out
+    ///
+    pub fn blink(
+        &mut self,
+        on_time: f32,
+        off_time: f32,
+        fade_in_time: f32,
+        fade_out_time: f32,
+        on_color: (f32, f32, f32),
+        off_color: (f32, f32, f32),
+    ) {
+        self.red.blink(
+            on_time,
+            off_time,
+            fade_in_time,
+            fade_out_time,
+            on_color.0,
+            off_color.0,
+        );
+        self.green.blink(
+            on_time,
+            off_time,
+            fade_in_time,
+            fade_out_time,
+            on_color.1,
+            off_color.1,
+        );
+        self.blue.blink(
+            on_time,
+            off_time,
+            fade_in_time,
+            fade_out_time,
+            on_color.2,
+            off_color.2,
+        );
+    }
+
+    /// Turns all LEDs on.
+    pub fn on(&mut self) {
+        self.red.on();
+        self.green.on();
+        self.blue.on();
+    }
+
+    /// Turns all LEDs off.
+    pub fn off(&mut self) {
+        self.red.off();
+        self.green.off();
+        self.blue.off();
+    }
+
+    /// Stops device.
+    pub fn stop(&mut self) {
+        self.red.0.stop();
+        self.green.0.stop();
+        self.blue.0.stop();
+    }
+
+    /// Make the device fade in and out repeatedly.
+    /// * `fade_in_time` - Number of seconds to spend fading in
+    /// * `fade_out_time` - Number of seconds to spend fading out
+    ///
+    pub fn pulse(
+        &mut self,
+        fade_in_time: f32,
+        fade_out_time: f32,
+        on_color: (f32, f32, f32),
+        off_color: (f32, f32, f32),
+    ) {
+        self.red
+            .pulse(fade_in_time, fade_out_time, on_color.0, off_color.0);
+        self.green
+            .pulse(fade_in_time, fade_out_time, on_color.1, off_color.1);
+        self.blue
+            .pulse(fade_in_time, fade_out_time, on_color.2, off_color.2);
+    }
+
+    /// Set the duty cycle of the PWM device. 0.0 is off, 1.0 is fully on.
+    /// Values in between may be specified for varying levels of power in the device.
+    pub fn set_value(&mut self, rgb: (f64, f64, f64)) {
+        if !(0.0..=1.0).contains(&rgb.0)
+            || !(0.0..=1.0).contains(&rgb.1)
+            || !(0.0..=1.0).contains(&rgb.2)
+        {
+            panic!("Invalid colour: {:?}", rgb);
+        }
+        self.red.set_value(rgb.0);
+        self.green.set_value(rgb.1);
+        self.blue.set_value(rgb.2);
+    }
+
+    /// Set the number of times to blink the device    
+    /// * `n` - Number of times to blink
+    pub fn set_blink_count(&mut self, n: i32) {
+        self.red.0.blink_count = Some(n);
+        self.green.0.blink_count = Some(n);
+        self.blue.0.blink_count = Some(n);
     }
 }
 
