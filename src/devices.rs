@@ -31,6 +31,7 @@ macro_rules! impl_device {
 pub struct GpioDevice {
     pin: Pin,
     active_state: bool,
+    #[allow(dead_code)]
     inactive_state: bool,
 }
 
