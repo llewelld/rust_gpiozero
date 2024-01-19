@@ -4,7 +4,7 @@ use rust_gpiozero::*;
 use std::{io::Read, time::Duration};
 
 fn input() {
-    std::io::stdin().read(&mut [0u8]).unwrap();
+    std::io::stdin().read_exact(&mut [0u8]).unwrap();
 }
 
 fn sleep(millis: u64) {

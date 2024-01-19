@@ -782,6 +782,22 @@ impl RGBLED {
         self.green.0.blink_count = Some(n);
         self.blue.0.blink_count = Some(n);
     }
+
+    /// Returns whether any of red, green or blue are active.
+    pub fn is_active(&self) -> bool {
+        self.red.0.device.lock().unwrap().is_active()
+            || self.green.0.device.lock().unwrap().is_active()
+            || self.blue.0.device.lock().unwrap().is_active()
+    }
+
+    /// Switches off if active and on if inactive.
+    pub fn toggle(&mut self) {
+        if self.is_active() {
+            self.off()
+        } else {
+            self.on()
+        }
+    }
 }
 
 struct MotorCompositeDevice(PWMOutputDevice, PWMOutputDevice);
