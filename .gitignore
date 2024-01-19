@@ -9,3 +9,5 @@ rust_gpiozero.iml
 .idea/tasks.xml
 .idea/dictionaries
 .idea/vcs.xml
+
+.cargo
