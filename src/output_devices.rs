@@ -663,14 +663,14 @@ impl PWMLED {
     }
 }
 
-pub struct RGBLED {
+pub struct RGBPWMLED {
     red: PWMLED,
     green: PWMLED,
     blue: PWMLED,
 }
 
-impl RGBLED {
-    pub fn new(red: u8, green: u8, blue: u8, active_high: bool) -> RGBLED {
+impl RGBPWMLED {
+    pub fn new(red: u8, green: u8, blue: u8, active_high: bool) -> RGBPWMLED {
         let mut red = PWMLED::new(red);
         let mut green = PWMLED::new(green);
         let mut blue = PWMLED::new(blue);
