@@ -1,6 +1,7 @@
 //! Output device component interfaces for devices such as `LED`, `PWMLED`, etc
 use palette::rgb::Rgb;
 use rppal::gpio::{Gpio, IoPin, Level, Mode};
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -257,7 +258,7 @@ impl DigitalOutputDevice {
     }
 }
 
-pub struct RGBLED {
+pub struct RGBDigitalLED {
     red: Arc<Mutex<OutputDevice>>,
     green: Arc<Mutex<OutputDevice>>,
     blue: Arc<Mutex<OutputDevice>>,
@@ -266,7 +267,7 @@ pub struct RGBLED {
     blink_count: Option<i32>,
 }
 
-impl RGBLED {
+impl RGBDigitalLED {
     fn blinker(
         &mut self,
         on_time: f32,
@@ -383,7 +384,7 @@ impl RGBLED {
     }
 }
 
-impl CommonRGB for RGBLED {
+impl CommonRGB for RGBDigitalLED {
     fn new(pin_red: u8, pin_green: u8, pin_blue: u8, active_high: bool) -> Self {
         let red = Arc::new(Mutex::new(OutputDevice::new(pin_red)));
         let green = Arc::new(Mutex::new(OutputDevice::new(pin_green)));
@@ -1077,26 +1078,118 @@ impl CommonRGB for RGBPWMLED {
     }
 }
 
-// TODO: for digital and pwm impls
-// pub fn blink(
-//     &mut self,
-//     on_time: f32,
-//     off_time: f32,
-//     fade_in_time: f32,
-//     fade_out_time: f32,
-// );
-// pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32);
+pub struct Digital;
+pub struct PWM;
 
-// pub fn blink(
-//     &mut self,
-//     on_time: f32,
-//     off_time: f32,
-//     fade_in_time: f32,
-//     fade_out_time: f32,
-//     on_color: Rgb,
-//     off_color: Rgb,
-// );
-// pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_color: Rgb, off_color: Rgb);
+pub struct RGBDigitalOrPWMLED<T: CommonRGB, U = Digital> {
+    rgbled: T,
+    _marker: PhantomData<U>,
+}
+
+impl<T, U> CommonRGB for RGBDigitalOrPWMLED<T, U>
+where
+    T: CommonRGB,
+{
+    fn new(red: u8, green: u8, blue: u8, active_high: bool) -> Self {
+        RGBDigitalOrPWMLED {
+            rgbled: T::new(red, blue, green, active_high),
+            _marker: PhantomData,
+        }
+    }
+
+    fn on(&mut self) {
+        todo!()
+    }
+
+    fn off(&mut self) {
+        todo!()
+    }
+
+    fn stop(&mut self) {
+        todo!()
+    }
+
+    fn active_high(&self) -> bool {
+        todo!()
+    }
+
+    fn set_active_high(&mut self, value: bool) {
+        todo!()
+    }
+
+    fn pin_red(&self) -> u8 {
+        todo!()
+    }
+
+    fn pin_green(&self) -> u8 {
+        todo!()
+    }
+
+    fn pin_blue(&self) -> u8 {
+        todo!()
+    }
+
+    fn close(self) {
+        todo!()
+    }
+
+    fn wait(&mut self) {
+        todo!()
+    }
+
+    fn set_color(&mut self, color: Rgb) {
+        todo!()
+    }
+
+    fn set_blink_count(&mut self, n: i32) {
+        todo!()
+    }
+
+    fn is_lit(&self) -> bool {
+        todo!()
+    }
+
+    fn is_active(&self) -> bool {
+        todo!()
+    }
+
+    fn toggle(&mut self) {
+        todo!()
+    }
+}
+
+// Distinct methods for Digital generic
+impl RGBDigitalOrPWMLED<RGBDigitalLED, Digital> {
+    pub fn blink(&mut self, on_time: f32, off_time: f32, on_color: Rgb, off_color: Rgb) {
+        self.rgbled.blink(on_time, off_time, on_color, off_color);
+    }
+}
+
+// Distinct methods for PWM generic
+impl RGBDigitalOrPWMLED<RGBPWMLED, PWM> {
+    pub fn blink(
+        &mut self,
+        on_time: f32,
+        off_time: f32,
+        fade_in_time: f32,
+        fade_out_time: f32,
+        on_color: Rgb,
+        off_color: Rgb,
+    ) {
+        self.rgbled.blink(
+            on_time,
+            off_time,
+            fade_in_time,
+            fade_out_time,
+            on_color,
+            off_color,
+        )
+    }
+    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_color: Rgb, off_color: Rgb) {
+        self.rgbled
+            .pulse(fade_in_time, fade_out_time, on_color, off_color)
+    }
+}
 
 struct MotorCompositeDevice(PWMOutputDevice, PWMOutputDevice);
 

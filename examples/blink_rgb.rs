@@ -6,7 +6,7 @@ use std::{thread, time};
 
 fn main() {
     // Create a new LED attached to Pin 17
-    let mut led = RGBLED::new(12, 19, 13, true);
+    let mut led = RGBDigitalLED::new(12, 19, 13, true);
 
     // Display some colours for half a second each
     led.set_color(Rgb::new(1.0, 1.0, 0.0));
