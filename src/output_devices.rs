@@ -267,46 +267,6 @@ pub struct RGBLED {
 }
 
 impl RGBLED {
-    pub fn new(pin_red: u8, pin_green: u8, pin_blue: u8, active_high: bool) -> RGBLED {
-        let red = Arc::new(Mutex::new(OutputDevice::new(pin_red)));
-        let green = Arc::new(Mutex::new(OutputDevice::new(pin_green)));
-        let blue = Arc::new(Mutex::new(OutputDevice::new(pin_blue)));
-        red.lock().unwrap().set_active_high(active_high);
-        green.lock().unwrap().set_active_high(active_high);
-        blue.lock().unwrap().set_active_high(active_high);
-        Self {
-            red,
-            green,
-            blue,
-            blinking: Arc::new(AtomicBool::new(false)),
-            handle: None,
-            blink_count: None,
-        }
-    }
-
-    pub fn set_color(&mut self, color: Rgb) {
-        Self::write_color(&self.red, &self.green, &self.blue, color);
-    }
-
-    fn write_color(
-        red: &Arc<Mutex<OutputDevice>>,
-        green: &Arc<Mutex<OutputDevice>>,
-        blue: &Arc<Mutex<OutputDevice>>,
-        color: Rgb,
-    ) {
-        Self::write_state(&red, color.red > 0.5);
-        Self::write_state(&green, color.green > 0.5);
-        Self::write_state(&blue, color.blue > 0.5);
-    }
-
-    fn write_state(device: &Arc<Mutex<OutputDevice>>, value: bool) {
-        if device.lock().unwrap().value_to_state(value) {
-            device.lock().unwrap().pin.set_high()
-        } else {
-            device.lock().unwrap().pin.set_low()
-        }
-    }
-
     fn blinker(
         &mut self,
         on_time: f32,
@@ -362,26 +322,18 @@ impl RGBLED {
             || self.blue.lock().unwrap().is_active()
     }
     /// Turns the device on.
-    pub fn on(&self) {
+    pub fn on(&mut self) {
         self.stop();
         self.red.lock().unwrap().on();
         self.green.lock().unwrap().on();
         self.blue.lock().unwrap().on();
     }
     /// Turns the device off.
-    pub fn off(&self) {
+    pub fn off(&mut self) {
         self.stop();
         self.red.lock().unwrap().off();
         self.green.lock().unwrap().off();
         self.blue.lock().unwrap().off();
-    }
-    /// Reverse the state of the device. If it's on, turn it off; if it's off, turn it on.
-    pub fn toggle(&mut self) {
-        if self.is_active() {
-            self.on()
-        } else {
-            self.off()
-        }
     }
 
     /// Returns ``True`` if the device is currently active and ``False`` otherwise.
@@ -399,60 +351,6 @@ impl RGBLED {
         self.blue.lock().unwrap().value()
     }
 
-    fn stop(&self) {
-        self.blinking.clone().store(false, Ordering::SeqCst);
-        self.red.lock().unwrap().pin.set_low();
-        self.green.lock().unwrap().pin.set_low();
-        self.blue.lock().unwrap().pin.set_low();
-    }
-
-    /// When ``True``, the `value` property is ``True`` when the device's
-    /// `pin` is high. When ``False`` the `value` property is
-    /// ``True`` when the device's pin is low (i.e. the value is inverted).
-    /// Be warned that changing it will invert `value` (i.e. changing this property doesn't change
-    /// the device's pin state - it just changes how that state is interpreted).
-    pub fn active_high(&self) -> bool {
-        self.red.lock().unwrap().active_high()
-            || self.green.lock().unwrap().active_high()
-            || self.blue.lock().unwrap().active_high()
-    }
-
-    /// Set the state for active_high
-    pub fn set_active_high(&mut self, value: bool) {
-        self.red.lock().unwrap().set_active_high(value);
-        self.green.lock().unwrap().set_active_high(value);
-        self.blue.lock().unwrap().set_active_high(value);
-    }
-
-    /// The `Pin` that the device is connected to.
-    pub fn pin_red(&self) -> u8 {
-        self.red.lock().unwrap().pin.pin()
-    }
-
-    /// The `Pin` that the device is connected to.
-    pub fn pin_green(&self) -> u8 {
-        self.green.lock().unwrap().pin.pin()
-    }
-
-    /// The `Pin` that the device is connected to.
-    pub fn pin_blue(&self) -> u8 {
-        self.blue.lock().unwrap().pin.pin()
-    }
-
-    /// Shut down the device and release all associated resources.
-    pub fn close(self) {
-        drop(self)
-    }
-
-    /// Block until background process is done
-    pub fn wait(&mut self) {
-        self.handle
-            .take()
-            .expect("Called stop on non-running thread")
-            .join()
-            .expect("Could not join spawned thread");
-    }
-
     /// Make the device turn on and off repeatedly in the background.
     /// Use `set_blink_count` to set the number of times to blink the device
     /// * `on_time` - Number of seconds on
@@ -465,14 +363,127 @@ impl RGBLED {
         }
     }
 
+    fn write_state(device: &Arc<Mutex<OutputDevice>>, value: bool) {
+        if device.lock().unwrap().value_to_state(value) {
+            device.lock().unwrap().pin.set_high()
+        } else {
+            device.lock().unwrap().pin.set_low()
+        }
+    }
+
+    fn write_color(
+        red: &Arc<Mutex<OutputDevice>>,
+        green: &Arc<Mutex<OutputDevice>>,
+        blue: &Arc<Mutex<OutputDevice>>,
+        color: Rgb,
+    ) {
+        Self::write_state(&red, color.red > 0.5);
+        Self::write_state(&green, color.green > 0.5);
+        Self::write_state(&blue, color.blue > 0.5);
+    }
+}
+
+impl CommonRGB for RGBLED {
+    fn new(pin_red: u8, pin_green: u8, pin_blue: u8, active_high: bool) -> Self {
+        let red = Arc::new(Mutex::new(OutputDevice::new(pin_red)));
+        let green = Arc::new(Mutex::new(OutputDevice::new(pin_green)));
+        let blue = Arc::new(Mutex::new(OutputDevice::new(pin_blue)));
+        red.lock().unwrap().set_active_high(active_high);
+        green.lock().unwrap().set_active_high(active_high);
+        blue.lock().unwrap().set_active_high(active_high);
+        Self {
+            red,
+            green,
+            blue,
+            blinking: Arc::new(AtomicBool::new(false)),
+            handle: None,
+            blink_count: None,
+        }
+    }
+
+    fn set_color(&mut self, color: Rgb) {
+        Self::write_color(&self.red, &self.green, &self.blue, color);
+    }
+
+    /// Reverse the state of the device. If it's on, turn it off; if it's off, turn it on.
+    fn toggle(&mut self) {
+        if self.is_active() {
+            self.on()
+        } else {
+            self.off()
+        }
+    }
+    fn stop(&mut self) {
+        self.blinking.clone().store(false, Ordering::SeqCst);
+        self.red.lock().unwrap().pin.set_low();
+        self.green.lock().unwrap().pin.set_low();
+        self.blue.lock().unwrap().pin.set_low();
+    }
+    /// When ``True``, the `value` property is ``True`` when the device's
+    /// `pin` is high. When ``False`` the `value` property is
+    /// ``True`` when the device's pin is low (i.e. the value is inverted).
+    /// Be warned that changing it will invert `value` (i.e. changing this property doesn't change
+    /// the device's pin state - it just changes how that state is interpreted).
+    fn active_high(&self) -> bool {
+        self.red.lock().unwrap().active_high()
+            || self.green.lock().unwrap().active_high()
+            || self.blue.lock().unwrap().active_high()
+    }
+
+    /// Set the state for active_high
+    fn set_active_high(&mut self, value: bool) {
+        self.red.lock().unwrap().set_active_high(value);
+        self.green.lock().unwrap().set_active_high(value);
+        self.blue.lock().unwrap().set_active_high(value);
+    }
+
+    /// The `Pin` that the device is connected to.
+    fn pin_red(&self) -> u8 {
+        self.red.lock().unwrap().pin.pin()
+    }
+
+    /// The `Pin` that the device is connected to.
+    fn pin_green(&self) -> u8 {
+        self.green.lock().unwrap().pin.pin()
+    }
+
+    /// The `Pin` that the device is connected to.
+    fn pin_blue(&self) -> u8 {
+        self.blue.lock().unwrap().pin.pin()
+    }
+
+    /// Shut down the device and release all associated resources.
+    fn close(self) {
+        drop(self)
+    }
+    /// Block until background process is done
+    fn wait(&mut self) {
+        self.handle
+            .take()
+            .expect("Called stop on non-running thread")
+            .join()
+            .expect("Could not join spawned thread");
+    }
     /// Set the number of times to blink the device
     /// * `n` - Number of times to blink
-    pub fn set_blink_count(&mut self, n: i32) {
+    fn set_blink_count(&mut self, n: i32) {
         self.blink_count = Some(n)
     }
 
-    pub fn is_lit(&self) -> bool {
+    fn is_lit(&self) -> bool {
         self.is_active()
+    }
+
+    fn on(&mut self) {
+        todo!()
+    }
+
+    fn off(&mut self) {
+        todo!()
+    }
+
+    fn is_active(&self) -> bool {
+        todo!()
     }
 }
 
@@ -890,16 +901,6 @@ pub struct RGBPWMLED {
 }
 
 impl RGBPWMLED {
-    pub fn new(red: u8, green: u8, blue: u8, active_high: bool) -> RGBPWMLED {
-        let mut red = PWMLED::new(red);
-        let mut green = PWMLED::new(green);
-        let mut blue = PWMLED::new(blue);
-        red.0.set_active_high(active_high);
-        green.0.set_active_high(active_high);
-        blue.0.set_active_high(active_high);
-        Self { red, green, blue }
-    }
-
     /// Make the device turn on and off repeatedly
     /// * `on_time` - Number of seconds on
     /// * `off_time` - Number of seconds off
@@ -941,27 +942,6 @@ impl RGBPWMLED {
         );
     }
 
-    /// Turns all LEDs on.
-    pub fn on(&mut self) {
-        self.red.on();
-        self.green.on();
-        self.blue.on();
-    }
-
-    /// Turns all LEDs off.
-    pub fn off(&mut self) {
-        self.red.off();
-        self.green.off();
-        self.blue.off();
-    }
-
-    /// Stops device.
-    pub fn stop(&mut self) {
-        self.red.0.stop();
-        self.green.0.stop();
-        self.blue.0.stop();
-    }
-
     /// Make the device fade in and out repeatedly.
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
@@ -974,10 +954,61 @@ impl RGBPWMLED {
         self.blue
             .pulse(fade_in_time, fade_out_time, on_color.blue, off_color.blue);
     }
+}
 
+pub trait CommonRGB {
+    fn new(red: u8, green: u8, blue: u8, active_high: bool) -> Self;
+    fn on(&mut self);
+    fn off(&mut self);
+    fn stop(&mut self);
+    fn active_high(&self) -> bool;
+    fn set_active_high(&mut self, value: bool);
+    fn pin_red(&self) -> u8;
+    fn pin_green(&self) -> u8;
+    fn pin_blue(&self) -> u8;
+    fn close(self);
+    fn wait(&mut self);
+    fn set_color(&mut self, color: Rgb);
+    fn set_blink_count(&mut self, n: i32);
+    fn is_lit(&self) -> bool;
+    fn is_active(&self) -> bool;
+    fn toggle(&mut self);
+}
+
+impl CommonRGB for RGBPWMLED {
+    fn new(red: u8, green: u8, blue: u8, active_high: bool) -> RGBPWMLED {
+        let mut red = PWMLED::new(red);
+        let mut green = PWMLED::new(green);
+        let mut blue = PWMLED::new(blue);
+        red.0.set_active_high(active_high);
+        green.0.set_active_high(active_high);
+        blue.0.set_active_high(active_high);
+        Self { red, green, blue }
+    }
+
+    /// Turns all LEDs on.
+    fn on(&mut self) {
+        self.red.on();
+        self.green.on();
+        self.blue.on();
+    }
+
+    /// Turns all LEDs off.
+    fn off(&mut self) {
+        self.red.off();
+        self.green.off();
+        self.blue.off();
+    }
+
+    /// Stops device.
+    fn stop(&mut self) {
+        self.red.0.stop();
+        self.green.0.stop();
+        self.blue.0.stop();
+    }
     /// Set the duty cycle of the PWM device. 0.0 is off, 1.0 is fully on.
     /// Values in between may be specified for varying levels of power in the device.
-    pub fn set_value(&mut self, rgb: Rgb) {
+    fn set_color(&mut self, rgb: Rgb) {
         if !(0.0..=1.0).contains(&rgb.red)
             || !(0.0..=1.0).contains(&rgb.green)
             || !(0.0..=1.0).contains(&rgb.blue)
@@ -991,28 +1022,81 @@ impl RGBPWMLED {
 
     /// Set the number of times to blink the device    
     /// * `n` - Number of times to blink
-    pub fn set_blink_count(&mut self, n: i32) {
+    fn set_blink_count(&mut self, n: i32) {
         self.red.0.blink_count = Some(n);
         self.green.0.blink_count = Some(n);
         self.blue.0.blink_count = Some(n);
     }
 
     /// Returns whether any of red, green or blue are active.
-    pub fn is_active(&self) -> bool {
+    fn is_active(&self) -> bool {
         self.red.0.device.lock().unwrap().is_active()
             || self.green.0.device.lock().unwrap().is_active()
             || self.blue.0.device.lock().unwrap().is_active()
     }
 
     /// Switches off if active and on if inactive.
-    pub fn toggle(&mut self) {
+    fn toggle(&mut self) {
         if self.is_active() {
             self.off()
         } else {
             self.on()
         }
     }
+
+    fn active_high(&self) -> bool {
+        todo!()
+    }
+
+    fn set_active_high(&mut self, value: bool) {
+        todo!()
+    }
+
+    fn pin_red(&self) -> u8 {
+        todo!()
+    }
+
+    fn pin_green(&self) -> u8 {
+        todo!()
+    }
+
+    fn pin_blue(&self) -> u8 {
+        todo!()
+    }
+
+    fn close(self) {
+        todo!()
+    }
+
+    fn wait(&mut self) {
+        todo!()
+    }
+
+    fn is_lit(&self) -> bool {
+        todo!()
+    }
 }
+
+// TODO: for digital and pwm impls
+// pub fn blink(
+//     &mut self,
+//     on_time: f32,
+//     off_time: f32,
+//     fade_in_time: f32,
+//     fade_out_time: f32,
+// );
+// pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32);
+
+// pub fn blink(
+//     &mut self,
+//     on_time: f32,
+//     off_time: f32,
+//     fade_in_time: f32,
+//     fade_out_time: f32,
+//     on_color: Rgb,
+//     off_color: Rgb,
+// );
+// pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_color: Rgb, off_color: Rgb);
 
 struct MotorCompositeDevice(PWMOutputDevice, PWMOutputDevice);
 
