@@ -15,5 +15,6 @@ edition = "2018"
 
 
 [dependencies]
+palette = "0.7.3"
 rppal = "0.12.0"
 

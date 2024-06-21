@@ -1,4 +1,5 @@
 //! Output device component interfaces for devices such as `LED`, `PWMLED`, etc
+use palette::rgb::Rgb;
 use rppal::gpio::{Gpio, IoPin, Level, Mode};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -692,32 +693,32 @@ impl RGBPWMLED {
         off_time: f32,
         fade_in_time: f32,
         fade_out_time: f32,
-        on_color: (f32, f32, f32),
-        off_color: (f32, f32, f32),
+        on_color: Rgb,
+        off_color: Rgb,
     ) {
         self.red.blink(
             on_time,
             off_time,
             fade_in_time,
             fade_out_time,
-            on_color.0,
-            off_color.0,
+            on_color.red,
+            off_color.red,
         );
         self.green.blink(
             on_time,
             off_time,
             fade_in_time,
             fade_out_time,
-            on_color.1,
-            off_color.1,
+            on_color.green,
+            off_color.green,
         );
         self.blue.blink(
             on_time,
             off_time,
             fade_in_time,
             fade_out_time,
-            on_color.2,
-            off_color.2,
+            on_color.blue,
+            off_color.blue,
         );
     }
 
@@ -746,33 +747,27 @@ impl RGBPWMLED {
     /// * `fade_in_time` - Number of seconds to spend fading in
     /// * `fade_out_time` - Number of seconds to spend fading out
     ///
-    pub fn pulse(
-        &mut self,
-        fade_in_time: f32,
-        fade_out_time: f32,
-        on_color: (f32, f32, f32),
-        off_color: (f32, f32, f32),
-    ) {
+    pub fn pulse(&mut self, fade_in_time: f32, fade_out_time: f32, on_color: Rgb, off_color: Rgb) {
         self.red
-            .pulse(fade_in_time, fade_out_time, on_color.0, off_color.0);
+            .pulse(fade_in_time, fade_out_time, on_color.red, off_color.red);
         self.green
-            .pulse(fade_in_time, fade_out_time, on_color.1, off_color.1);
+            .pulse(fade_in_time, fade_out_time, on_color.green, off_color.green);
         self.blue
-            .pulse(fade_in_time, fade_out_time, on_color.2, off_color.2);
+            .pulse(fade_in_time, fade_out_time, on_color.blue, off_color.blue);
     }
 
     /// Set the duty cycle of the PWM device. 0.0 is off, 1.0 is fully on.
     /// Values in between may be specified for varying levels of power in the device.
-    pub fn set_value(&mut self, rgb: (f64, f64, f64)) {
-        if !(0.0..=1.0).contains(&rgb.0)
-            || !(0.0..=1.0).contains(&rgb.1)
-            || !(0.0..=1.0).contains(&rgb.2)
+    pub fn set_value(&mut self, rgb: Rgb) {
+        if !(0.0..=1.0).contains(&rgb.red)
+            || !(0.0..=1.0).contains(&rgb.green)
+            || !(0.0..=1.0).contains(&rgb.blue)
         {
             panic!("Invalid colour: {:?}", rgb);
         }
-        self.red.set_value(rgb.0);
-        self.green.set_value(rgb.1);
-        self.blue.set_value(rgb.2);
+        self.red.set_value(rgb.red.into());
+        self.green.set_value(rgb.green.into());
+        self.blue.set_value(rgb.blue.into());
     }
 
     /// Set the number of times to blink the device    
