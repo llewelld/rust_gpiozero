@@ -13,7 +13,7 @@ fn sleep(millis: u64) {
 
 fn main() {
     // Create a new RGBLED attached to Pins 16, 20, 21
-    let mut led: RGBLED = RGBLED::new(16, 20, 21, false);
+    let mut led: RGBPWMLED = RGBPWMLED::new(16, 20, 21, false);
 
     // Set red
     led.set_value((1.0, 0.0, 0.0));
